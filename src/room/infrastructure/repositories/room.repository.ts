@@ -16,6 +16,36 @@ export class MongoRoomRepository implements RoomRepository {
     @InjectModel('Room') private readonly _roomModel: Model<RoomModel>,
   ) {}
 
+  async findByUserId(userId: string): Promise<Room | null> {
+    const roomDoc = await this._roomModel
+      .findOne({ userIds: userId })
+      .populate<{ game: GameModel | null }>('game');
+    return roomDoc
+      ? new Room(
+          roomDoc.id,
+          roomDoc.ownerUserId.toString(),
+          roomDoc.userIds.map((id) => id.toString()),
+          roomDoc.game
+            ? new Game(
+                roomDoc.game.id,
+                roomDoc.game.players.map((player) => {
+                  return new Player(
+                    player.userId.toString(),
+                    player.mark as Mark,
+                  );
+                }),
+                new Board(
+                  roomDoc.game.board.cells,
+                  roomDoc.game.board.history,
+                  roomDoc.game.board.currentTurn,
+                ),
+                roomDoc.game.status,
+              )
+            : null,
+        )
+      : null;
+  }
+
   async findById(id: string): Promise<Room | null> {
     const roomDoc = await this._roomModel
       .findById(id)

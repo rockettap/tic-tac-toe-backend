@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/auth/auth.module';
@@ -7,10 +8,14 @@ import { RoomService } from './application/room.service';
 import { MongoRoomRepository } from './infrastructure/repositories/room.repository';
 import { RoomController } from './infrastructure/room.controller';
 import { RoomGateway } from './infrastructure/room.gateway';
+import { TimeoutConsumer } from './infrastructure/room.processor';
 import { RoomSchema } from './infrastructure/schemas/room.schema';
 
 @Module({
   imports: [
+    BullModule.registerQueue({
+      name: 'timeout',
+    }),
     MongooseModule.forFeature([{ name: 'Room', schema: RoomSchema }]),
     AuthModule,
     GameModule,
@@ -23,6 +28,7 @@ import { RoomSchema } from './infrastructure/schemas/room.schema';
       provide: 'RoomRepository',
       useClass: MongoRoomRepository,
     },
+    TimeoutConsumer,
   ],
   controllers: [RoomController],
   exports: [RoomService, 'RoomRepository'],

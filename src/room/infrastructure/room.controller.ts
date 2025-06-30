@@ -2,12 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
-  InternalServerErrorException,
   Param,
   Post,
   Request,
   UseGuards,
 } from '@nestjs/common';
+import { ParseObjectIdPipe } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { RoomService } from '../application/room.service';
 
@@ -20,27 +21,44 @@ export class RoomController {
   async createRoom(@Request() request: any) {
     try {
       return await this._roomService.create(request.user.sub);
-    } catch {
-      throw new InternalServerErrorException();
+    } catch (err) {
+      // if (err instanceof InvalidEmailError) {
+      //   throw new BadRequestException(err.message);
+      // }
+      // if (err instanceof EmailAlreadyInUseError) {
+      //   throw new UnauthorizedException(err.message);
+      // }
+      throw err;
     }
   }
 
   @UseGuards(AuthGuard)
   @Post(':roomId/start')
-  async startGame(@Param('roomId') roomId: string, @Request() request: any) {
-    return await this._roomService.startGame(roomId, request.user.sub);
+  async startGame(
+    @Param('roomId', ParseObjectIdPipe) roomId: Types.ObjectId,
+    @Request() request: any,
+  ) {
+    return await this._roomService.startGame(
+      roomId.toString(),
+      request.user.sub,
+    );
   }
 
   @UseGuards(AuthGuard)
   @Post(':roomId/move')
   async makeMove(
-    @Param('roomId') roomId: string,
+    @Param('roomId', ParseObjectIdPipe) roomId: Types.ObjectId,
     @Request() request: any,
     @Body() body: { row: number; column: number },
   ) {
     const { row, column } = body;
     try {
-      await this._roomService.makeMove(roomId, request.user.sub, row, column);
+      await this._roomService.makeMove(
+        roomId.toString(),
+        request.user.sub,
+        row,
+        column,
+      );
     } catch {
       throw new BadRequestException();
     }

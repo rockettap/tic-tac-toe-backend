@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -10,6 +11,12 @@ import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
     ConfigModule.forRoot({ isGlobal: true }),
     MongooseModule.forRoot('mongodb://localhost:27017/test'),
     AuthModule,

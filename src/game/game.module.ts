@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/auth/auth.module';
+import { UserService } from 'src/user/application/user.service';
 import { MongoUserRepository } from 'src/user/infrastructure/repositories/user.repository';
 import { UserSchema } from 'src/user/infrastructure/schemas/user.schema';
 import { GameService } from './application/game.service';
@@ -12,19 +13,20 @@ import { GameSchema } from './infrastructure/schemas/game.schema';
   imports: [
     AuthModule,
     MongooseModule.forFeature([
-      { name: 'User', schema: UserSchema },
       { name: 'Game', schema: GameSchema },
+      { name: 'User', schema: UserSchema },
     ]),
   ],
   providers: [
     GameService,
-    {
-      provide: 'UserRepository',
-      useClass: MongoUserRepository,
-    },
+    UserService,
     {
       provide: 'GameRepository',
       useClass: MongoGameRepository,
+    },
+    {
+      provide: 'UserRepository',
+      useClass: MongoUserRepository,
     },
   ],
   controllers: [GameController],

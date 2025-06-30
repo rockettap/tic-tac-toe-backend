@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -5,6 +6,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Queue } from 'bullmq';
 import { Server, Socket } from 'socket.io';
 import { Game } from 'src/game/domain/game.entity';
 import { RoomService } from '../application/room.service';
@@ -23,6 +25,7 @@ export class RoomGateway {
     private readonly _jwtService: JwtService,
     @Inject(forwardRef(() => RoomService))
     private readonly _roomService: RoomService,
+    @InjectQueue('timeout') private _timeoutQueue: Queue,
   ) {}
 
   async handleConnection(@ConnectedSocket() client: Socket) {
@@ -30,16 +33,14 @@ export class RoomGateway {
       ? client.handshake.query.token[0]
       : client.handshake.query.token;
     if (!token) {
-      client.disconnect();
-      return;
+      return client.disconnect();
     }
 
     const roomId = Array.isArray(client.handshake.query.roomId)
       ? client.handshake.query.roomId[0]
       : client.handshake.query.roomId;
     if (!roomId) {
-      client.disconnect();
-      return;
+      return client.disconnect();
     }
 
     try {
@@ -50,23 +51,54 @@ export class RoomGateway {
       );
       if (isAlreadyConnected) {
         this._logger.warn(
-          `${userId} (${client.id}) is already connected, disconnecting new connection.`,
+          `User ${userId} (${client.id}) is already connected, disconnecting new connection.`,
         );
-        client.disconnect();
-        return;
+        return client.disconnect();
+      }
+
+      const activeRoom = await this._roomService.findRoomByUserId(userId);
+      if (activeRoom && activeRoom.id !== roomId) {
+        this._logger.warn(
+          `User ${userId} (${client.id}) is still assigned to room '${activeRoom.id}' but attempted to join room '${roomId}'. Rejecting connection. User must leave the current room before joining a new one.`,
+        );
+        return client.disconnect();
       }
 
       await this._roomService.addUserToRoom(userId, roomId);
-      this._sidUserIds.set(client.id, userId);
       client.join(roomId);
-      this.server.to(roomId).emit('room:joined', `${userId} joined the room.`);
 
-      this._logger.log(`${userId} (${client.id}) joined the room.`);
+      client.emit(
+        'room:gameStarted',
+        (await this._roomService.findRoomById(roomId)).game,
+      );
+
+      this.server.to(roomId).emit('room:joined', `${userId} joined the room.`);
+      this._sidUserIds.set(client.id, userId);
+
+      await this._timeoutQueue.remove(`job-${userId}`);
+      await this._timeoutQueue.add(
+        'userTimeout',
+        { userId: userId },
+        { delay: 135_000, jobId: `job-${userId}` },
+      );
+
+      client.conn.on('heartbeat', async () => {
+        this._logger.debug(`User ${userId} (${client.id}) heartbeat.`);
+
+        await this._timeoutQueue.remove(`job-${userId}`);
+        await this._timeoutQueue.add(
+          'userTimeout',
+          { userId },
+          { delay: 135_000, jobId: `job-${userId}` },
+        );
+      });
+
+      this._logger.log(
+        `User ${userId} (${client.id}) joined the room ${roomId}.`,
+      );
     } catch (error) {
       this._logger.error(error);
-
-      client.disconnect();
-      return;
+      return client.disconnect();
     }
   }
 
@@ -75,25 +107,12 @@ export class RoomGateway {
       ? client.handshake.query.token[0]
       : client.handshake.query.token;
 
-    const roomId = Array.isArray(client.handshake.query.roomId)
-      ? client.handshake.query.roomId[0]
-      : client.handshake.query.roomId;
-
-    if (token && roomId) {
+    if (token) {
       try {
-        const { sub: userId } = this._jwtService.verify(token);
-
-        await this._roomService.removeUserFromRoom(userId, roomId);
         this._sidUserIds.delete(client.id);
-        client.leave(roomId);
-        this.server.to(roomId).emit('room:left', `${userId} left the room.`);
-
-        this._logger.log(`${userId} (${client.id}) left the room.`);
       } catch (error) {
         this._logger.error(error);
-
-        client.disconnect();
-        return;
+        return client.disconnect();
       }
     }
   }
@@ -104,5 +123,14 @@ export class RoomGateway {
 
   makeMove(roomId: string, game: Game) {
     this.server.to(roomId).emit('game:moveMade', game);
+  }
+
+  getSocketIdByUserId(userId: string): string | undefined {
+    for (const [socketId, uid] of this._sidUserIds.entries()) {
+      if (uid === userId) {
+        return socketId;
+      }
+    }
+    return undefined;
   }
 }

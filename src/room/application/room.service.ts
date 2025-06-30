@@ -24,6 +24,10 @@ export class RoomService {
     private readonly _roomGateway: RoomGateway,
   ) {}
 
+  async findRoomByUserId(userId: string): Promise<Room | null> {
+    return this._roomRepository.findByUserId(userId);
+  }
+
   async create(ownerUserId: string): Promise<Room> {
     const room = new Room('', ownerUserId);
     return await this._roomRepository.create(room);
@@ -106,6 +110,20 @@ export class RoomService {
       column,
     );
 
+    if (updatedGame.winner) {
+      room.game = null;
+
+      await this._roomRepository.update(room);
+
+      // this._roomGateway.makeMove(room.id, updatedGame);
+    }
+
     this._roomGateway.makeMove(room.id, updatedGame);
+  }
+
+  async findRoomById(roomId: string): Promise<Room | null> {
+    const room = await this._roomRepository.findById(roomId);
+
+    return room || null;
   }
 }
