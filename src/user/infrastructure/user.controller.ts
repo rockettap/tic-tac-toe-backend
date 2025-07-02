@@ -10,7 +10,6 @@ export class UserController {
   @Get(':id')
   async findOne(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
     const user = await this._userService.findById(id.toString());
-
     if (!user) {
       throw new NotFoundException();
     }

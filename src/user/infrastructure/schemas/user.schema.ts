@@ -3,7 +3,7 @@ import { HydratedDocument } from 'mongoose';
 
 export type UserModel = HydratedDocument<User>;
 
-@Schema()
+@Schema({ timestamps: true })
 export class User {
   @Prop({ type: String, required: true, unique: true })
   email: string;

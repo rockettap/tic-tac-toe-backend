@@ -1,12 +1,12 @@
+import { Board } from '@/game/domain/board.entity';
+import { GameRepository } from '@/game/domain/game-repository.interface';
+import { Game } from '@/game/domain/game.entity';
+import { Mark } from '@/game/domain/mark.value-object';
+import { Player } from '@/game/domain/player.entity';
+import { GameModel } from '@/game/infrastructure/schemas/game.schema';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Board } from 'src/game/domain/board.entity';
-import { GameRepository } from '../../domain/game-repository.interface';
-import { Game } from '../../domain/game.entity';
-import { Mark } from '../../domain/mark.value-object';
-import { Player } from '../../domain/player.entity';
-import { GameModel } from '../schemas/game.schema';
 
 @Injectable()
 export class MongoGameRepository implements GameRepository {

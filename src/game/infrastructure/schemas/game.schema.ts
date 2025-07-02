@@ -1,8 +1,11 @@
+import { GameStatus } from '@/game/domain/game.entity';
+import { Board, BoardSchema } from '@/game/infrastructure/schemas/board.schema';
+import {
+  Player,
+  PlayerSchema,
+} from '@/game/infrastructure/schemas/player.schema';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { GameStatus } from 'src/game/domain/game.entity';
-import { Board, BoardSchema } from './board.schema';
-import { Player, PlayerSchema } from './player.schema';
 
 export type GameModel = HydratedDocument<Game>;
 

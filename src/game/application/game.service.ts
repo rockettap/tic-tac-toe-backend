@@ -1,20 +1,18 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { UserRepository } from 'src/user/domain/user-repository.inferface';
-import { GameRepository } from '../domain/game-repository.interface';
-import { Game } from '../domain/game.entity';
-import { Player } from '../domain/player.entity';
-import { Position } from '../domain/position.value-object';
+import { GameNotFoundError } from '@/game/application/errors/game-not-found.error';
+import { PlayerNotInGameError } from '@/game/application/errors/player-not-in-game.error';
+import { GameRepository } from '@/game/domain/game-repository.interface';
+import { Game } from '@/game/domain/game.entity';
+import { Player } from '@/game/domain/player.entity';
+import { Position } from '@/game/domain/position.value-object';
+import { UserNotFoundError } from '@/user/application/errors/user-not-found.error';
+import { UserService } from '@/user/application/user.service';
+import { Inject, Injectable } from '@nestjs/common';
 
 @Injectable()
 export class GameService {
   constructor(
-    @Inject('UserRepository') private readonly _userRepository: UserRepository,
     @Inject('GameRepository') private readonly _gameRepository: GameRepository,
+    private readonly _userService: UserService,
   ) {}
 
   async findById(id: string): Promise<Game | null> {
@@ -35,10 +33,15 @@ export class GameService {
   async create(userIds: string[]): Promise<Game> {
     const players = await Promise.all(
       userIds.map(async (userId, index) => {
-        const user = await this._userRepository.findById(userId);
+        // const user = await this._userRepository.findById(userId);
+        // if (!user) {
+        //   throw new NotFoundException();
+        // }
+        const user = await this._userService.findById(userId);
         if (!user) {
-          throw new NotFoundException();
+          throw new UserNotFoundError(userId);
         }
+
         return new Player(userId, index % 2 === 0 ? 'X' : 'O');
       }),
     );
@@ -55,17 +58,23 @@ export class GameService {
   ): Promise<Game> {
     const game = await this._gameRepository.findById(gameId);
     if (!game) {
-      throw new NotFoundException();
+      throw new GameNotFoundError(gameId);
     }
 
-    const user = await this._userRepository.findById(userId);
+    // TODO: Decouple from NestJS by using custom application-layer errors'
+    // instead of HTTP exceptions
+    // const user = await this._userRepository.findById(userId);
+    // if (!user) {
+    //   throw new NotFoundException();
+    // }
+    const user = await this._userService.findById(userId);
     if (!user) {
-      throw new NotFoundException();
+      throw new UserNotFoundError(userId);
     }
 
     const player = game.players.find((player) => player.id === user.id);
     if (!player) {
-      throw new ForbiddenException();
+      throw new PlayerNotInGameError(userId, gameId);
     }
 
     const position = new Position(row, column);

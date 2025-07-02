@@ -1,3 +1,5 @@
+import { UserService } from '@/user/application/user.service';
+import { User } from '@/user/domain/user.entity';
 import {
   BadRequestException,
   Injectable,
@@ -5,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { UserService } from 'src/user/application/user.service';
-import { User } from 'src/user/domain/user.entity';
 
 @Injectable()
 export class AuthService {

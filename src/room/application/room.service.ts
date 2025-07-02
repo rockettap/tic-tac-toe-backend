@@ -36,12 +36,12 @@ export class RoomService {
   async addUserToRoom(userId: string, roomId: string) {
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found.`);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found.`);
+      throw new NotFoundException(`Room with ID ${roomId} not found`);
     }
 
     room.addUser(userId);
@@ -52,12 +52,12 @@ export class RoomService {
   async removeUserFromRoom(userId: string, roomId: string) {
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found.`);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found.`);
+      throw new NotFoundException(`Room with ID ${roomId} not found`);
     }
 
     room.removeUser(userId);
@@ -74,7 +74,7 @@ export class RoomService {
   async startGame(roomId: string, userId: string) {
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found.`);
+      throw new NotFoundException(`Room with ID ${roomId} not found`);
     }
 
     // Pre-check to make sure we don't create a new game in the repository
@@ -85,7 +85,7 @@ export class RoomService {
 
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found.`);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
     if (!room.userIds.includes(userId)) {
       throw new ForbiddenException();

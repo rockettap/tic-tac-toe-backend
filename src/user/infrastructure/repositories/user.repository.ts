@@ -37,7 +37,6 @@ export class MongoUserRepository implements UserRepository {
       .findByIdAndUpdate(
         user.id,
         {
-          _id: user.id,
           email: user.email,
           passwordHash: user.passwordHash,
         },

@@ -1,6 +1,6 @@
+import { Mark } from '@/game/domain/mark.value-object';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { Mark } from 'src/game/domain/mark.value-object';
 
 export type BoardModel = HydratedDocument<Board>;
 

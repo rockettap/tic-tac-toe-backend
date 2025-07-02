@@ -38,10 +38,14 @@ export class RoomController {
     @Param('roomId', ParseObjectIdPipe) roomId: Types.ObjectId,
     @Request() request: any,
   ) {
-    return await this._roomService.startGame(
-      roomId.toString(),
-      request.user.sub,
-    );
+    try {
+      return await this._roomService.startGame(
+        roomId.toString(),
+        request.user.sub,
+      );
+    } catch (err) {
+      throw err;
+    }
   }
 
   @UseGuards(AuthGuard)
