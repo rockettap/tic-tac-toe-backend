@@ -51,7 +51,7 @@ export class Board {
   mark(position: Position) {
     const index = position.toIndex();
     if (this._cells[index] !== null) {
-      throw new Error('The cell is already marked.');
+      throw new Error('The cell is already marked');
     }
 
     this._cells[index] = this._currentTurn;

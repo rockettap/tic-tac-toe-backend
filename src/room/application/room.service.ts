@@ -1,17 +1,14 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  forwardRef,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { GameAlreadyStartedError } from '@/game/application/errors/game-already-started.error';
+import { UserNotFoundError } from '@/user/application/errors/user-not-found.error';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { GameService } from 'src/game/application/game.service';
 import { GameRepository } from 'src/game/domain/game-repository.interface';
 import { UserRepository } from 'src/user/domain/user-repository.inferface';
 import { RoomRepository } from '../domain/room-repository.interface';
 import { Room } from '../domain/room.entity';
 import { RoomGateway } from '../infrastructure/room.gateway';
+import { RoomNotFoundError } from './errors/room-not-found.error';
+import { UserNotInRoomError } from './errors/user-not-in-room.error';
 
 @Injectable()
 export class RoomService {
@@ -36,12 +33,12 @@ export class RoomService {
   async addUserToRoom(userId: string, roomId: string) {
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new UserNotFoundError(userId);
     }
 
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found`);
+      throw new RoomNotFoundError(`Room with ID ${roomId} not found`);
     }
 
     room.addUser(userId);
@@ -52,18 +49,20 @@ export class RoomService {
   async removeUserFromRoom(userId: string, roomId: string) {
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new UserNotFoundError(`User with ID ${userId} not found`);
     }
 
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found`);
+      throw new RoomNotFoundError(`Room with ID ${roomId} not found`);
     }
 
     room.removeUser(userId);
 
     if (room.game) {
       await this._gameRepository.update(room.game);
+
+      this._roomGateway.finishGame(room.id, room.game);
 
       room.game = null;
     }
@@ -74,21 +73,21 @@ export class RoomService {
   async startGame(roomId: string, userId: string) {
     const room = await this._roomRepository.findById(roomId);
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found`);
+      throw new RoomNotFoundError(`Room with ID ${roomId} not found`);
     }
 
     // Pre-check to make sure we don't create a new game in the repository
     // without assigning it to a room.
     if (room.game) {
-      throw new BadRequestException();
+      throw new GameAlreadyStartedError(room.game.id);
     }
 
     const user = await this._userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new UserNotFoundError(`User with ID ${userId} not found`);
     }
     if (!room.userIds.includes(userId)) {
-      throw new ForbiddenException();
+      throw new UserNotInRoomError(userId, roomId);
     }
 
     const game = await this._gameService.create(room.userIds);
@@ -97,7 +96,7 @@ export class RoomService {
 
     const updatedRoom = await this._roomRepository.update(room);
 
-    this._roomGateway.startGame(room.id, updatedRoom.game);
+    this._roomGateway.startGame(roomId, updatedRoom);
   }
 
   async makeMove(roomId: string, userId: string, row: number, column: number) {
@@ -115,10 +114,10 @@ export class RoomService {
 
       await this._roomRepository.update(room);
 
-      // this._roomGateway.makeMove(room.id, updatedGame);
+      return this._roomGateway.finishGame(roomId, updatedGame);
     }
 
-    this._roomGateway.makeMove(room.id, updatedGame);
+    this._roomGateway.makeMove(roomId, updatedGame);
   }
 
   async findRoomById(roomId: string): Promise<Room | null> {

@@ -1,5 +1,6 @@
+import { GameAlreadyStartedError } from '@/game/application/errors/game-already-started.error';
 import { InjectQueue } from '@nestjs/bullmq';
-import { forwardRef, Inject, Logger, NotFoundException } from '@nestjs/common';
+import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -10,7 +11,10 @@ import { Queue } from 'bullmq';
 import { isValidObjectId } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import { Game } from 'src/game/domain/game.entity';
+import { RoomNotFoundError } from '../application/errors/room-not-found.error';
+import { UserNotInRoomError } from '../application/errors/user-not-in-room.error';
 import { RoomService } from '../application/room.service';
+import { Room } from '../domain/room.entity';
 
 @WebSocketGateway({
   cors: {
@@ -19,7 +23,8 @@ import { RoomService } from '../application/room.service';
 })
 export class RoomGateway {
   @WebSocketServer() server: Server;
-  private readonly _sidUserIds: Map<string, string> = new Map();
+  public readonly _sidUserIds: Map<string, string> = new Map();
+  // private readonly _userSocketIds: Map<string, string> = new Map();
   private readonly _logger = new Logger(RoomGateway.name);
 
   constructor(
@@ -30,9 +35,14 @@ export class RoomGateway {
   ) {}
 
   async handleConnection(@ConnectedSocket() client: Socket) {
-    const token = Array.isArray(client.handshake.query.token)
-      ? client.handshake.query.token[0]
-      : client.handshake.query.token;
+    // const token = Array.isArray(client.handshake.query.token)
+    //   ? client.handshake.query.token[0]
+    //   : client.handshake.query.token;
+    // if (!token) {
+    //   return client.disconnect();
+    // }
+
+    const token = client.handshake.auth.token;
     if (!token) {
       return client.disconnect();
     }
@@ -47,12 +57,15 @@ export class RoomGateway {
     try {
       const { sub: userId } = this._jwtService.verify(token);
 
-      const isAlreadyConnected = Array.from(this._sidUserIds.values()).includes(
-        userId,
-      );
-      if (isAlreadyConnected) {
+      const existingSocketId = this.getSocketIdByUserId(userId);
+
+      // Check if the socket still exists on the server
+      const existingSocket = existingSocketId
+        ? this.server.sockets.sockets.get(existingSocketId)
+        : null;
+      if (existingSocket && this.server.sockets.sockets.has(existingSocketId)) {
         this._logger.warn(
-          `User ${userId} (${client.id}) is already connected, disconnecting new connection.`,
+          `User '${userId}' ('${client.id}') is already connected, disconnecting new connection.`,
         );
 
         client.emit(
@@ -66,7 +79,7 @@ export class RoomGateway {
       const activeRoom = await this._roomService.findRoomByUserId(userId);
       if (activeRoom && activeRoom.id !== roomId) {
         this._logger.warn(
-          `User ${userId} (${client.id}) is still assigned to room '${activeRoom.id}' but attempted to join room '${roomId}'. Rejecting connection. User must leave the current room before joining a new one.`,
+          `User '${userId}' ('${client.id}') is still assigned to room '${activeRoom.id}' but attempted to join room '${roomId}'. Rejecting connection. User must leave the current room before joining a new one.`,
         );
 
         client.emit(
@@ -77,16 +90,17 @@ export class RoomGateway {
         return client.disconnect();
       }
 
-      await this._roomService.addUserToRoom(userId, roomId);
-      client.join(roomId);
       this._sidUserIds.set(client.id, userId);
+      await this._roomService.addUserToRoom(userId, roomId);
+
+      client.join(roomId);
 
       client.emit(
         'room:gameStarted',
-        (await this._roomService.findRoomById(roomId)).game,
+        await this._roomService.findRoomById(roomId),
       );
 
-      this.server.to(roomId).emit('room:joined', `${userId} joined the room.`);
+      this.joinRoom(roomId, userId);
 
       await this._timeoutQueue.remove(`job-${userId}`);
       await this._timeoutQueue.add(
@@ -96,7 +110,7 @@ export class RoomGateway {
       );
 
       client.conn.on('heartbeat', async () => {
-        this._logger.debug(`User ${userId} (${client.id}) heartbeat.`);
+        this._logger.debug(`User '${userId}' ('${client.id}') heartbeat.`);
 
         await this._timeoutQueue.remove(`job-${userId}`);
         await this._timeoutQueue.add(
@@ -106,42 +120,42 @@ export class RoomGateway {
         );
       });
 
-      this._logger.log(
-        `User ${userId} (${client.id}) joined the room ${roomId}.`,
+      this._logger.debug(
+        `User '${userId}' ('${client.id}') joined the room '${roomId}'.`,
       );
     } catch (err) {
       this._logger.error(err);
 
-      if (err instanceof NotFoundException) {
+      if (err instanceof RoomNotFoundError) {
+        client.emit('room:error', 'Room not found.');
+      } else if (err instanceof UserNotInRoomError) {
+        client.emit('room:error', 'You are not a member of this room.');
+      } else if (err instanceof GameAlreadyStartedError) {
         client.emit(
           'room:error',
-          `The room you're trying to join doesn't exist.`,
+          'Cannot join room: game has already started.',
         );
       } else {
-        client.emit('room:error', `Unknown error!`);
+        // client.emit('room:error', 'An unexpected error occurred.');
+        client.emit('room:error', err.message);
       }
 
       return client.disconnect();
     }
   }
 
-  async handleDisconnect(@ConnectedSocket() client: Socket) {
-    const token = Array.isArray(client.handshake.query.token)
-      ? client.handshake.query.token[0]
-      : client.handshake.query.token;
-
-    if (token) {
-      try {
-        this._sidUserIds.delete(client.id);
-      } catch (err) {
-        this._logger.error(err);
-        return client.disconnect();
-      }
+  handleDisconnect(@ConnectedSocket() client: Socket) {
+    try {
+      this._sidUserIds.delete(client.id);
+      this._logger.debug(this._sidUserIds);
+      this._logger.debug(`Client ${client.id} left the WORLD.`);
+    } catch (err) {
+      this._logger.error(err);
     }
   }
 
-  startGame(roomId: string, game: Game) {
-    this.server.to(roomId).emit('room:gameStarted', game);
+  startGame(roomId: string, room: Room) {
+    this.server.to(roomId).emit('room:gameStarted', room);
   }
 
   makeMove(roomId: string, game: Game) {
@@ -149,7 +163,15 @@ export class RoomGateway {
   }
 
   finishGame(roomId: string, game: Game) {
-    this.server.to(roomId).emit('room:gameFinished', game.winner);
+    this.server.to(roomId).emit('room:gameFinished', game);
+  }
+
+  joinRoom(roomId: string, userId: string) {
+    this.server.to(roomId).emit('room:joined', userId);
+  }
+
+  leaveRoom(roomId: string, userId: string) {
+    this.server.to(roomId).emit('room:left', userId);
   }
 
   getSocketIdByUserId(userId: string): string | undefined {

@@ -5,6 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
@@ -13,9 +14,13 @@ export class AuthService {
   constructor(
     private readonly _jwtService: JwtService,
     private readonly _userService: UserService,
+    private readonly _configService: ConfigService,
   ) {}
 
-  async signIn(email: string, password: string): Promise<object> {
+  async signIn(
+    email: string,
+    password: string,
+  ): Promise<{ access_token: string; refresh_token: string }> {
     if (!this.isValidEmail(email)) {
       throw new BadRequestException('Invalid email format');
     }
@@ -31,10 +36,20 @@ export class AuthService {
     }
 
     const payload = { sub: user.id };
-    return { access_token: await this._jwtService.signAsync(payload) };
+    const accessToken = await this._jwtService.signAsync(payload, {
+      expiresIn: this._configService.get('JWT_ACCESS_TOKEN_EXPIRES_IN'),
+    });
+    const refreshToken = await this._jwtService.signAsync(payload, {
+      expiresIn: this._configService.get('JWT_REFRESH_TOKEN_EXPIRES_IN'),
+    });
+
+    return { access_token: accessToken, refresh_token: refreshToken };
   }
 
-  async signUp(email: string, password: string): Promise<object> {
+  async signUp(
+    email: string,
+    password: string,
+  ): Promise<{ access_token: string; refresh_token: string }> {
     if (!this.isValidEmail(email)) {
       throw new BadRequestException('Invalid email format');
     }
@@ -50,7 +65,41 @@ export class AuthService {
     );
 
     const payload = { sub: createdUser.id };
-    return { access_token: await this._jwtService.signAsync(payload) };
+    const accessToken = await this._jwtService.signAsync(payload, {
+      expiresIn: this._configService.get('JWT_ACCESS_TOKEN_EXPIRES_IN'),
+    });
+    const refreshToken = await this._jwtService.signAsync(payload, {
+      expiresIn: this._configService.get('JWT_REFRESH_TOKEN_EXPIRES_IN'),
+    });
+
+    return { access_token: accessToken, refresh_token: refreshToken };
+  }
+
+  async refreshToken(
+    token: string,
+  ): Promise<{ refresh_token: string; access_token: string }> {
+    let payload: any;
+
+    try {
+      payload = this._jwtService.verify(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this._userService.findById(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const updatedPayload = { sub: user.id };
+    const accessToken = await this._jwtService.signAsync(updatedPayload, {
+      expiresIn: this._configService.get('JWT_ACCESS_TOKEN_EXPIRES_IN'),
+    });
+    const refreshToken = await this._jwtService.signAsync(updatedPayload, {
+      expiresIn: this._configService.get('JWT_REFRESH_TOKEN_EXPIRES_IN'),
+    });
+
+    return { access_token: accessToken, refresh_token: refreshToken };
   }
 
   private isValidEmail(email: string): boolean {

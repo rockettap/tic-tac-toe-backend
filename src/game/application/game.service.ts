@@ -56,6 +56,8 @@ export class GameService {
     row: number,
     column: number,
   ): Promise<Game> {
+    const position = new Position(row, column);
+
     const game = await this._gameRepository.findById(gameId);
     if (!game) {
       throw new GameNotFoundError(gameId);
@@ -76,8 +78,6 @@ export class GameService {
     if (!player) {
       throw new PlayerNotInGameError(userId, gameId);
     }
-
-    const position = new Position(row, column);
 
     player.move(game, position);
 

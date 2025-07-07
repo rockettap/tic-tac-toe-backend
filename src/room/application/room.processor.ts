@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { RoomService } from '../application/room.service';
-import { RoomGateway } from './room.gateway';
+import { RoomGateway } from '../infrastructure/room.gateway';
 
 @Processor('timeout')
 export class TimeoutConsumer extends WorkerHost {
@@ -28,7 +28,7 @@ export class TimeoutConsumer extends WorkerHost {
     );
     socket?.disconnect(true);
 
-    // TODO: `room:left`
+    this._roomGateway.leaveRoom(room.id, job.data.userId);
 
     return {};
   }
